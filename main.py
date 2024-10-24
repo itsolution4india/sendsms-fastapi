@@ -105,11 +105,12 @@ async def send_message(session: aiohttp.ClientSession, token: str, phone_number_
     }
     
     if variables:
-        for variable in variables:
-            body_component["parameters"].append({
+        body_component["parameters"] = [
+            {
                 "type": "text",
                 "text": variable
-            })
+            } for variable in variables
+        ]
 
     context_info = json.dumps({
         "template_name": template_name,
@@ -132,15 +133,13 @@ async def send_message(session: aiohttp.ClientSession, token: str, phone_number_
             "language": {"code": language},
             "components": [
                 header_component,
-                {"type": "body", "parameters": []}
+                body_component
             ]
         },
         "context": {
             "message_id": f"template_{template_name}_{context_info}"
         }
     }
-
-    logger.info(f"Sending message to {contact} with template {template_name} via {phone_number_id}")
 
     try:
         timeout = aiohttp.ClientTimeout(total=30)
@@ -169,7 +168,6 @@ def chunks(lst: ty.List[str], size: int) -> ty.Generator[ty.List[str], None, Non
 
 @app.post("/send_sms/")
 async def send_messages_api(request: MessageRequest):
-    logger.info(f"Received request to send messages: {request}")
     try:
         await send_messages(
             token=request.token,
@@ -181,7 +179,6 @@ async def send_messages_api(request: MessageRequest):
             contact_list=request.contact_list,
             variable_list=request.variable_list
         )
-        logger.info("Messages sent successfully")
         return {'message': 'Messages sent successfully'}
     except HTTPException as e:
         logger.error(f"HTTP error: {e}")
@@ -192,7 +189,6 @@ async def send_messages_api(request: MessageRequest):
 
 @app.post("/send_flow_message/")
 async def send_flow_message_api(request: FlowMessageRequest):
-    logger.info(f"Received request to send flow message: {request}")
     try:
         status_code, response_dict = await send_template_with_flow(
             request.token,
@@ -203,7 +199,6 @@ async def send_flow_message_api(request: FlowMessageRequest):
             request.recipient_phone_number
         )
         if status_code == 200:
-            logger.info("Flow message sent successfully")
             return {'message': 'Flow message sent successfully', 'response': response_dict}
         else:
             logger.error(f"Failed to send flow message. Status code: {status_code}, Response: {response_dict}")
