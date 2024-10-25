@@ -212,6 +212,19 @@ def root():
     logger.info("Root endpoint accessed.")
     return {"message": "Successful"}
 
+@app.post("/shopify-webhook/")
+async def receive_order(request: Request):
+    data = await request.json()
+    order_details = data.get("order")
+    # Extract necessary order details
+    order_id = order_details.get("id")
+    customer_name = order_details.get("customer", {}).get("first_name")
+    total_price = order_details.get("total_price")
+    phone_number = order_details.get("customer", {}).get("phone")
+    logging.info(f"{order_id}, {customer_name}, {total_price}, {phone_number}")
+
+    return {"status": "success"}
+
 if __name__ == '__main__':
     logger.info("Starting the FastAPI server")
     uvicorn.run(app, host="127.0.0.1", port=8000)
