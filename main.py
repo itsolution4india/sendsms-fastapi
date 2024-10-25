@@ -7,7 +7,7 @@ import uvicorn
 import asyncio
 import json
 from pydantic import BaseModel
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 
 # Configure logging to log to console only (no file)
 logging.basicConfig(
