@@ -8,6 +8,7 @@ import asyncio
 import json
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Request
+from typing import Optional, List
 
 # Configure logging to log to console only (no file)
 logging.basicConfig(
@@ -41,6 +42,22 @@ class FlowMessageRequest(BaseModel):
     flow_id: str
     language: str
     recipient_phone_number: str
+
+class BotMessageRequest(BaseModel):
+    token: str
+    phone_number_id: str
+    contact_list: List[str]
+    message_type: str
+    header: Optional[str] = None
+    body: Optional[str] = None
+    footer: Optional[str] = None
+    button_data: Optional[List[dict]] = None
+    product_data: Optional[dict] = None
+    catalog_id: Optional[str] = None
+    sections: Optional[List[dict]] = None
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    media_id: Optional[str] = None
 
 async def send_template_with_flow(token: str, phone_number_id: str, template_name: str, flow_id: str, language: str, recipient_phone_number: str):
     url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
@@ -152,12 +169,152 @@ async def send_message(session: aiohttp.ClientSession, token: str, phone_number_
         logger.error(f"Error sending message to {contact}: {e}")
         return
 
+async def send_bot_message(session: aiohttp.ClientSession, token: str, phone_number_id: str, contact: str, message_type: str, header: ty.Optional[str] = None, body: ty.Optional[str] = None, footer: ty.Optional[str] = None, button_data: ty.Optional[ty.List[ty.Dict[str, str]]] = None, product_data: ty.Optional[ty.Dict] = None, catalog_id: ty.Optional[str] = None, sections: ty.Optional[ty.List[ty.Dict]] = None, latitude: ty.Optional[float] = None, longitude: ty.Optional[float] = None, media_id: ty.Optional[str] = None ) -> None:
+    url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": contact,
+        "type": "interactive"
+    }
+
+    if message_type == "text":
+        payload["type"] = "text"
+        payload["text"] = {
+            "preview_url": False,
+            "body": body
+        }
+
+    elif message_type == "image":
+        payload["type"] = "image"
+        payload["image"] = {
+            "id": media_id,
+            "caption": body if body else None
+        }
+
+    elif message_type == "document":
+        payload["type"] = "document"
+        payload["document"] = {
+            "id": media_id,
+            "caption": body if body else None,
+            "filename": header if header else "document"
+        }
+
+    elif message_type == "video":
+        payload["type"] = "video"
+        payload["video"] = {
+            "id": media_id,
+            "caption": body if body else None
+        }
+
+    elif message_type == "video":
+        payload["interactive"] = {
+            "type": "text",
+            "header": {
+                "type": "video",
+                "video": {
+                    "id": media_id
+                }
+            },
+            "body": {"text": body} if body else None
+        }
+
+    elif message_type == "list_message":
+        payload["interactive"] = {
+            "type": "list",
+            "header": {"type": "text", "text": header} if header else None,
+            "body": {"text": body},
+            "footer": {"text": footer} if footer else None,
+            "action": {
+                "button": "Choose an option",
+                "sections": sections
+            }
+        }
+    
+    elif message_type == "reply_button_message":
+        payload["interactive"] = {
+            "type": "button",
+            "body": {"text": body},
+            "footer": {"text": footer} if footer else None,
+            "action": {
+                "buttons": button_data
+            }
+        }
+
+    elif message_type == "single_product_message":
+        payload["interactive"] = {
+            "type": "product",
+            "body": {"text": body},
+            "footer": {"text": footer} if footer else None,
+            "action": {
+                "catalog_id": catalog_id,
+                "product_retailer_id": product_data["product_retailer_id"]
+            }
+        }
+    
+    elif message_type == "multi_product_message":
+        payload["interactive"] = {
+            "type": "product_list",
+            "header": {"type": "text", "text": header} if header else None,
+            "body": {"text": body},
+            "footer": {"text": footer} if footer else None,
+            "action": {
+                "catalog_id": catalog_id,
+                "sections": sections
+            }
+        }
+    
+    elif message_type == "location_message":
+        payload["type"] = "location"
+        payload["location"] = {
+            "latitude": latitude,
+            "longitude": longitude,
+            "name": header,
+            "address": body
+        }
+    
+    elif message_type == "location_request_message":
+        payload["interactive"] = {
+            "type": "LOCATION_REQUEST_MESSAGE",
+            "body": {
+                "text": body
+            },
+            "action": {
+                "name": "send_location"
+            }
+        }
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with session.post(url, json=payload, headers=headers) as response:
+            if response.status != 200:
+                    error_message = await response.text()
+                    logger.error(f"Failed to send bot message to {contact}. Status: {response.status}, Error: {error_message}")
+                    return
+    except aiohttp.ClientError as e:
+        logger.error(f"Error sending message to {contact}: {e}")
+        return
+
 async def send_messages(token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact_list: ty.List[str], variable_list: ty.List[str]) -> None:
     logger.info(f"Processing {len(contact_list)} contacts for sending messages.")
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
         for batch in chunks(contact_list, 75):
             logger.info(f"Sending batch of {len(batch)} contacts")
             tasks = [send_message(session, token, phone_number_id, template_name, language, media_type, media_id, contact, variable_list) for contact in batch]
+            await asyncio.gather(*tasks)
+            await asyncio.sleep(0.5)
+    logger.info("All messages processed.")
+
+async def send_bot_messages(token: str, phone_number_id: str, contact_list: ty.List[str], message_type: str, header: ty.Optional[str] = None, body: ty.Optional[str] = None, footer: ty.Optional[str] = None, button_data: ty.Optional[ty.List[ty.Dict[str, str]]] = None, product_data: ty.Optional[ty.Dict] = None, catalog_id: ty.Optional[str] = None, sections: ty.Optional[ty.List[ty.Dict]] = None, latitude: ty.Optional[float] = None, longitude: ty.Optional[float] = None, media_id: ty.Optional[str] = None) -> None:
+    logger.info(f"Processing {len(contact_list)} contacts for sending messages.")
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
+        for batch in chunks(contact_list, 75):
+            logger.info(f"Sending batch of {len(batch)} contacts")
+            tasks = [send_bot_message(session, token, phone_number_id, contact, message_type, header, body, footer, button_data, product_data, catalog_id, sections, latitude, longitude, media_id) for contact in batch]
             await asyncio.gather(*tasks)
             await asyncio.sleep(0.5)
     logger.info("All messages processed.")
@@ -178,6 +335,33 @@ async def send_messages_api(request: MessageRequest):
             media_id=request.media_id,
             contact_list=request.contact_list,
             variable_list=request.variable_list
+        )
+        return {'message': 'Messages sent successfully'}
+    except HTTPException as e:
+        logger.error(f"HTTP error: {e}")
+        raise e
+    except Exception as e:
+        logger.error(f"Unhandled error: {e}")
+        raise HTTPException(status_code=500, detail=f"Error processing request: {e}")
+
+@app.post("/bot_api/")
+async def bot_api(request: BotMessageRequest):
+    try:
+        await send_bot_messages(
+            token=request.token,
+            phone_number_id=request.phone_number_id,
+            contact_list=request.contact_list,
+            message_type=request.message_type,
+            header=request.header,
+            body=request.body,
+            footer=request.footer,
+            button_data=request.button_data,
+            product_data=request.product_data,
+            catalog_id=request.catalog_id,
+            sections=request.sections,
+            latitude=request.latitude,
+            longitude=request.longitude,
+            media_id=request.media_id
         )
         return {'message': 'Messages sent successfully'}
     except HTTPException as e:
@@ -211,19 +395,6 @@ async def send_flow_message_api(request: FlowMessageRequest):
 def root():
     logger.info("Root endpoint accessed.")
     return {"message": "Successful"}
-
-@app.post("/shopify-webhook/")
-async def receive_order(request: Request):
-    data = await request.json()
-    order_details = data.get("order")
-    # Extract necessary order details
-    order_id = order_details.get("id")
-    customer_name = order_details.get("customer", {}).get("first_name")
-    total_price = order_details.get("total_price")
-    phone_number = order_details.get("customer", {}).get("phone")
-    logging.info(f"{order_id}, {customer_name}, {total_price}, {phone_number}")
-
-    return {"status": "success"}
 
 if __name__ == '__main__':
     logger.info("Starting the FastAPI server")
