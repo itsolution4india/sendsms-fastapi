@@ -346,6 +346,7 @@ async def send_messages_api(request: MessageRequest):
 
 @app.post("/bot_api/")
 async def bot_api(request: BotMessageRequest):
+    logging.info(f"request {request}")
     try:
         await send_bot_messages(
             token=request.token,
