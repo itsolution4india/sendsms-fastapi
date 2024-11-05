@@ -14,7 +14,7 @@ from typing import Optional, List
 logging.basicConfig(
     level=logging.INFO,  # Set to DEBUG for more verbose logging
     format="%(asctime)s [%(levelname)s] %(message)s",  # Include timestamp
-    datefmt="%Y-%m-%d %H:%M:%S",  # Customize date format
+    datefmt="%Y-%m-%d %H:%M:%S",
     handlers=[
         logging.StreamHandler()  # Log to console (stdout)
     ]
