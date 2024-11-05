@@ -309,6 +309,16 @@ async def send_messages(token: str, phone_number_id: str, template_name: str, la
             await asyncio.sleep(0.5)
     logger.info("All messages processed.")
 
+async def send_template_with_flows(token: str, phone_number_id: str, template_name: str, flow_id: str, language: str, recipient_phone_number: ty.List[str]) -> None:
+    logger.info(f"Processing {len(recipient_phone_number)} contacts for sending messages.")
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
+        for batch in chunks(recipient_phone_number, 75):
+            logger.info(f"Sending batch of {len(batch)} contacts")
+            tasks = [send_template_with_flow(session, token, phone_number_id, template_name, flow_id, language, contact) for contact in batch]
+            await asyncio.gather(*tasks)
+            await asyncio.sleep(0.5)
+    logger.info("All messages processed.")
+
 async def send_bot_messages(token: str, phone_number_id: str, contact_list: ty.List[str], message_type: str, header: ty.Optional[str] = None, body: ty.Optional[str] = None, footer: ty.Optional[str] = None, button_data: ty.Optional[ty.List[ty.Dict[str, str]]] = None, product_data: ty.Optional[ty.Dict] = None, catalog_id: ty.Optional[str] = None, sections: ty.Optional[ty.List[ty.Dict]] = None, latitude: ty.Optional[float] = None, longitude: ty.Optional[float] = None, media_id: ty.Optional[str] = None) -> None:
     logger.info(f"Processing {len(contact_list)} contacts for sending messages.")
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
@@ -375,7 +385,7 @@ async def bot_api(request: BotMessageRequest):
 @app.post("/send_flow_message/")
 async def send_flow_message_api(request: FlowMessageRequest):
     try:
-        status_code, response_dict = await send_template_with_flow(
+        status_code, response_dict = await send_template_with_flows(
             request.token,
             request.phone_number_id,
             request.template_name,
