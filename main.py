@@ -41,7 +41,7 @@ class FlowMessageRequest(BaseModel):
     template_name: str
     flow_id: str
     language: str
-    recipient_phone_number: str
+    recipient_phone_number: ty.List[str]
 
 class BotMessageRequest(BaseModel):
     token: str
