@@ -59,7 +59,7 @@ class BotMessageRequest(BaseModel):
     longitude: Optional[float] = None
     media_id: Optional[str] = None
 
-async def send_template_with_flow(token: str, phone_number_id: str, template_name: str, flow_id: str, language: str, recipient_phone_number: str):
+async def send_template_with_flow(session: aiohttp.ClientSession, token: str, phone_number_id: str, template_name: str, flow_id: str, language: str, recipient_phone_number: str):
     url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
     
     headers = {
