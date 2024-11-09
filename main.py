@@ -10,7 +10,7 @@ from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Request
 from typing import Optional, List
 
-# Configure logging to log to console only (no file)
+# Configure logging to log to console only (no file).
 logging.basicConfig(
     level=logging.INFO,  # Set to DEBUG for more verbose logging
     format="%(asctime)s [%(levelname)s] %(message)s",  # Include timestamp
