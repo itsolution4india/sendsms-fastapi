@@ -407,6 +407,53 @@ def root():
     logger.info("Root endpoint accessed.")
     return {"message": "Successful"}
 
+from fastapi import FastAPI, Depends
+from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from models import SessionLocal, User
+
+class UserCreate(BaseModel):
+    user_id: str
+    username: str
+    mail: str
+    coins: int
+    phone_number: str
+    api_token: str
+    discount: int
+    link_app: str
+    phone_id: str
+    waba_id: str
+
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+@app.post("/users/")
+def create_user(user: UserCreate, db: Session = Depends(get_db)):
+    db_user = User(
+        user_id=user.user_id,
+        username=user.username,
+        mail=user.mail,
+        coins=user.coins,
+        phone_number=user.phone_number,
+        api_token=user.api_token,
+        discount=user.discount,
+        link_app=user.link_app,
+        phone_id=user.phone_id,
+        waba_id=user.waba_id,
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+@app.get("/users/{user_id}")
+def get_user(user_id: str, db: Session = Depends(get_db)):
+    return db.query(User).filter(User.user_id == user_id).first()
+
 if __name__ == '__main__':
     logger.info("Starting the FastAPI server")
     uvicorn.run(app, host="127.0.0.1", port=8000)
