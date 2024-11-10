@@ -9,6 +9,7 @@ import json
 from pydantic import BaseModel
 from fastapi import FastAPI, HTTPException, Request
 from typing import Optional, List
+import httpx
 
 # Configure logging to log to console only (no file).
 logging.basicConfig(
@@ -25,6 +26,79 @@ logger = logging.getLogger(__name__)
 app = FastAPI()
 
 # Define the Pydantic model for request body
+class APIMessageRequest(BaseModel):
+    user_id: str
+    api_token: str
+    template_name: str
+    language: str
+    media_type: str
+    media_id: ty.Optional[str]
+    contact_list: ty.List[str]
+    variable_list: ty.Optional[ty.List[str]] = None
+
+class UserData(BaseModel):
+    whatsapp_business_account_id: str
+    phone_number_id: str
+    register_app__app_id: str
+    register_app__token: str
+    coins: int
+
+async def fetch_user_data(user_id: str, api_token: str) -> UserData:
+    """Fetch user data from the API"""
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.get("https://wtsdealnow.com/api/users/")
+            if response.status_code != 200:
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail="Failed to connect to user validation service"
+                )
+            
+            users = response.json()
+            user = next((u for u in users if u["user_id"] == user_id and u["api_token"] == api_token), None)
+            
+            if not user:
+                raise HTTPException(
+                    status_code=401,
+                    detail="Failed to validate user credentials. Please check your user_id and api_token"
+                )
+                
+            if not user["is_active"]:
+                raise HTTPException(
+                    status_code=403,
+                    detail="User account is not active. Please contact support"
+                )
+                
+            return UserData(
+                whatsapp_business_account_id=user["whatsapp_business_account_id"],
+                phone_number_id=user["phone_number_id"],
+                register_app__app_id=user["register_app__app_id"],
+                register_app__token=user["register_app__token"],
+                coins=user["coins"]
+            )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in user validation: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Internal server error during user validation"
+        )
+
+async def validate_coins(available_coins: int, required_contacts: int):
+    """Validate if user has sufficient coins"""
+    if required_contacts > available_coins:
+        raise HTTPException(
+            status_code=402,  # Using 402 Payment Required
+            detail={
+                "message": "Insufficient coins. Please recharge your account",
+                "available_coins": available_coins,
+                "required_coins": required_contacts
+            }
+        )
+
+
+
 class MessageRequest(BaseModel):
     token: str
     phone_number_id: str
@@ -408,6 +482,52 @@ def root():
     return {"message": "Successful"}
 
 
+@app.post("/send_sms_api/")
+async def send_sms_api(request: APIMessageRequest):
+    # Step 1: Validate user credentials
+    try:
+        user_data = await fetch_user_data(request.user_id, request.api_token)
+        logger.info(f"User validation successful for user_id: {request.user_id}")
+    except HTTPException as e:
+        logger.error(f"User validation failed: {e.detail}")
+        return {"status": "failed", "detail": e.detail}
+    
+    # Step 2: Validate coins
+    try:
+        total_contacts = len(request.contact_list)
+        await validate_coins(user_data.coins, total_contacts)
+        logger.info(f"Coin validation successful. Required: {total_contacts}, Available: {user_data.coins}")
+    except HTTPException as e:
+        logger.error(f"Coin validation failed: {e.detail}")
+        return {"status": "failed", "detail": e.detail}
+    
+    # Step 3: Send messages
+    try:
+        await send_messages(
+            meta_token=user_data.register_app__token,
+            meta_phone_id=user_data.phone_number_id,
+            template_name=request.template_name,
+            language=request.language,
+            media_type=request.media_type,
+            media_id=request.media_id,
+            contact_list=request.contact_list,
+            variable_list=request.variable_list
+        )
+        
+        return {
+            "status": "success",
+            "message": "Messages sent successfully",
+            "contacts_processed": total_contacts,
+            "remaining_coins": user_data.coins - total_contacts
+        }
+        
+    except Exception as e:
+        logger.error(f"Message sending failed: {str(e)}")
+        return {
+            "status": "failed",
+            "detail": "Failed to send messages. Please try again later",
+            "error": str(e)
+        }
 
 
 if __name__ == '__main__':
