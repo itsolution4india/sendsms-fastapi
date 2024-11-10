@@ -504,8 +504,8 @@ async def send_sms_api(request: APIMessageRequest):
     # Step 3: Send messages
     try:
         await send_messages(
-            meta_token=user_data.register_app__token,
-            meta_phone_id=user_data.phone_number_id,
+            token=user_data.register_app__token,
+            phone_number_id=user_data.phone_number_id,
             template_name=request.template_name,
             language=request.language,
             media_type=request.media_type,
