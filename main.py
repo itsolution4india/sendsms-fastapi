@@ -43,6 +43,10 @@ class UserData(BaseModel):
     register_app__token: str
     coins: int
 
+class APIBalanceRequest(BaseModel):
+    user_id: str
+    api_token: str
+
 async def fetch_user_data(user_id: str, api_token: str) -> UserData:
     """Fetch user data from the API"""
     try:
@@ -529,6 +533,17 @@ async def send_sms_api(request: APIMessageRequest):
             "error": str(e)
         }
 
+@app.post("/balance_check_api/")
+async def send_sms_api(request: APIBalanceRequest):
+    try:
+        user_data = await fetch_user_data(request.user_id, request.api_token)
+        logger.info(f"User validation successful for user_id: {request.user_id}")
+        return {"balance": user_data.coins}
+    except HTTPException as e:
+        logger.error(f"User validation failed: {e.detail}")
+        return {"status": "failed", "detail": e.detail}
+
+    
 
 if __name__ == '__main__':
     logger.info("Starting the FastAPI server")
