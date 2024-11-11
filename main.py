@@ -47,6 +47,14 @@ class APIBalanceRequest(BaseModel):
     user_id: str
     api_token: str
 
+class UpdateBalanceReportRequest(BaseModel):
+    user_id: str
+    api_token: str
+    coins: int
+    phone_numbers: str
+    all_contact: ty.List[int]
+    template_name: str
+
 async def fetch_user_data(user_id: str, api_token: str) -> UserData:
     """Fetch user data from the API"""
     try:
@@ -101,6 +109,50 @@ async def validate_coins(available_coins: int, required_contacts: int):
             }
         )
 
+async def update_balance_and_report(
+    user_id: str,
+    api_token: str,
+    coins: int,
+    contact_list: ty.List[str],
+    template_name: str
+) -> str:
+    """Update balance and create report"""
+    try:
+        # Prepare phone numbers string and contact list
+        phone_numbers = ",".join(contact_list)
+        all_contact = [int(phone.strip()) for phone in contact_list]
+        
+        update_data = UpdateBalanceReportRequest(
+            user_id=user_id,
+            api_token=api_token,
+            coins=coins,
+            phone_numbers=phone_numbers,
+            all_contact=all_contact,
+            template_name=template_name
+        )
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://wtsdealnow.com/update-balance-report/",
+                json=update_data.dict()
+            )
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to update balance and report: {response.text}")
+                raise HTTPException(
+                    status_code=response.status_code,
+                    detail="Failed to update balance and report"
+                )
+            
+            result = response.json()
+            return result["report_id"]
+            
+    except Exception as e:
+        logger.error(f"Error updating balance and report: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to update balance and report"
+        )
 
 
 class MessageRequest(BaseModel):
@@ -505,7 +557,7 @@ async def send_sms_api(request: APIMessageRequest):
         logger.error(f"Coin validation failed: {e.detail}")
         return {"status": "failed", "detail": e.detail}
     
-    # Step 3: Send messages
+    # Step 3: Send messages 
     try:
         await send_messages(
             token=user_data.register_app__token,
@@ -518,11 +570,21 @@ async def send_sms_api(request: APIMessageRequest):
             variable_list=request.variable_list
         )
         
+        # Step 4: Update balance and create report
+        report_id = await update_balance_and_report(
+            user_id=request.user_id,
+            api_token=request.api_token,
+            coins=total_contacts,
+            contact_list=request.contact_list,
+            template_name=request.template_name
+        )
+        
         return {
             "status": "success",
             "message": "Messages sent successfully",
             "contacts_processed": total_contacts,
-            "remaining_coins": user_data.coins - total_contacts
+            "remaining_coins": user_data.coins - total_contacts,
+            "report_id": report_id
         }
         
     except Exception as e:
