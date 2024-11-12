@@ -538,7 +538,7 @@ def root():
     return {"message": "Successful"}
 
 
-@app.post("/send_sms_api/")
+@app.api_route("/send_sms_api/", methods=["POST", "GET"])
 async def send_sms_api(request: APIMessageRequest):
     # Step 1: Validate user credentials
     try:
@@ -595,7 +595,7 @@ async def send_sms_api(request: APIMessageRequest):
             "error": str(e)
         }
 
-@app.post("/balance_check_api/")
+@app.api_route("/balance_check_api/", methods=["POST", "GET"])
 async def send_sms_api(request: APIBalanceRequest):
     try:
         user_data = await fetch_user_data(request.user_id, request.api_token)
