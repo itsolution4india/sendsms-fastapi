@@ -234,149 +234,42 @@ async def send_template_with_flow(session: aiohttp.ClientSession, token: str, ph
             logger.error(f"Error sending flow message: {e}")
             raise HTTPException(status_code=500, detail=f"Error sending flow message: {e}")
 
-# async def send_message(session: aiohttp.ClientSession, token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact: str, variables: ty.Optional[ty.List[str]] = None) -> None:
-#     url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
-#     headers = {
-#         "Authorization": f"Bearer {token}",
-#         "Content-Type": "application/json"
-#     }
-
-#     header_component = {
-#         "type": "header",
-#         "parameters": []
-#     }
-
-#     body_component = {
-#         "type": "body",
-#         "parameters": []
-#     }
-    
-#     if variables:
-#         body_component["parameters"] = [
-#             {
-#                 "type": "text",
-#                 "text": variable
-#             } for variable in variables
-#         ]
-
-#     context_info = json.dumps({
-#         "template_name": template_name,
-#         "language": language,
-#         "media_type": media_type
-#     })
-
-#     if media_id and media_type in ["IMAGE", "DOCUMENT", "VIDEO", "AUDIO"]:
-#         header_component["parameters"].append({
-#             "type": media_type.lower(),
-#             media_type.lower(): {"id": media_id}
-#         })
-
-#     payload = {
-#         "messaging_product": "whatsapp",
-#         "to": contact,
-#         "type": "template",
-#         "template": {
-#             "name": template_name,
-#             "language": {"code": language},
-#             "components": [
-#                 header_component,
-#                 body_component
-#             ]
-#         },
-#         "context": {
-#             "message_id": f"template_{template_name}_{context_info}"
-#         }
-#     }
-
-#     try:
-#         timeout = aiohttp.ClientTimeout(total=30)
-#         async with session.post(url, json=payload, headers=headers) as response:
-#             if response.status != 200:
-#                 error_message = await response.text()
-#                 logger.error(f"Failed to send message to {contact}. Status: {response.status}, Error: {error_message}")
-#                 return
-#     except aiohttp.ClientError as e:
-#         logger.error(f"Error sending message to {contact}: {e}")
-#         return
-
-async def send_message(session: aiohttp.ClientSession, token: str, phone_number_id: str, template_name: str, language: str, 
-                      media_type: str, media_id: ty.Optional[str], contact: str, 
-                      variables: ty.Optional[ty.List[str]] = None,
-                      template_data: ty.Optional[dict] = None) -> None:
-    """
-    Send WhatsApp message using templates with dynamic handling of variables and buttons.
-    
-    Args:
-        template_data: Dictionary containing template details including buttons configuration
-                      Format: {
-                          'template_data': str,  // Template text with variables
-                          'button': [{           // List of button configurations
-                              'type': str,       // Button type (URL, QUICK_REPLY, etc)
-                              'text': str,       // Button text
-                              'url': str         // URL for URL type buttons (optional)
-                          }]
-                      }
-    """
+async def send_message(session: aiohttp.ClientSession, token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact: str, variables: ty.Optional[ty.List[str]] = None) -> None:
     url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
     headers = {
         "Authorization": f"Bearer {token}",
         "Content-Type": "application/json"
     }
 
-    # Initialize components list
-    components = []
+    header_component = {
+        "type": "header",
+        "parameters": []
+    }
 
-    # Add header component if media is present
-    if media_id and media_type in ["IMAGE", "DOCUMENT", "VIDEO", "AUDIO"]:
-        header_component = {
-            "type": "header",
-            "parameters": [{
-                "type": media_type.lower(),
-                media_type.lower(): {"id": media_id}
-            }]
-        }
-        components.append(header_component)
-
-    # Add body component with variables
+    body_component = {
+        "type": "body",
+        "parameters": []
+    }
+    
     if variables:
-        body_component = {
-            "type": "body",
-            "parameters": [
-                {
-                    "type": "text",
-                    "text": variable
-                } for variable in variables
-            ]
-        }
-        components.append(body_component)
-
-    # Add button components if template has buttons
-    if template_data and 'button' in template_data:
-        for index, button in enumerate(template_data['button']):
-            if button['type'] == 'URL':
-                # Handle URL buttons with dynamic variables
-                url = button['url']
-                if variables and '{{1}}' in url:
-                    # Replace template variables in URL
-                    for i, var in enumerate(variables, 1):
-                        url = url.replace(f'{{{{{i}}}}}', var)
-                
-                button_component = {
-                    "type": "button",
-                    "sub_type": "url",
-                    "index": str(index),
-                    "parameters": [{
-                        "type": "text",
-                        "text": url
-                    }]
-                }
-                components.append(button_component)
+        body_component["parameters"] = [
+            {
+                "type": "text",
+                "text": variable
+            } for variable in variables
+        ]
 
     context_info = json.dumps({
         "template_name": template_name,
         "language": language,
         "media_type": media_type
     })
+
+    if media_id and media_type in ["IMAGE", "DOCUMENT", "VIDEO", "AUDIO"]:
+        header_component["parameters"].append({
+            "type": media_type.lower(),
+            media_type.lower(): {"id": media_id}
+        })
 
     payload = {
         "messaging_product": "whatsapp",
@@ -385,7 +278,10 @@ async def send_message(session: aiohttp.ClientSession, token: str, phone_number_
         "template": {
             "name": template_name,
             "language": {"code": language},
-            "components": components
+            "components": [
+                header_component,
+                body_component
+            ]
         },
         "context": {
             "message_id": f"template_{template_name}_{context_info}"
@@ -395,13 +291,10 @@ async def send_message(session: aiohttp.ClientSession, token: str, phone_number_
     try:
         timeout = aiohttp.ClientTimeout(total=30)
         async with session.post(url, json=payload, headers=headers) as response:
-            response_text = await response.text()
             if response.status != 200:
-                logger.error(f"Failed to send message to {contact}. Status: {response.status}, Error: {response_text}")
-                logger.debug(f"Failed payload: {json.dumps(payload, indent=2)}")
+                error_message = await response.text()
+                logger.error(f"Failed to send message to {contact}. Status: {response.status}, Error: {error_message}")
                 return
-            logger.info(f"Successfully sent message to {contact}")
-            logger.debug(f"Success response: {response_text}")
     except aiohttp.ClientError as e:
         logger.error(f"Error sending message to {contact}: {e}")
         return
