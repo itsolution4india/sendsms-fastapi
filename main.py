@@ -289,15 +289,31 @@ async def send_message(session: aiohttp.ClientSession, token: str, phone_number_
     }
 
     try:
-        timeout = aiohttp.ClientTimeout(total=30)
         async with session.post(url, json=payload, headers=headers) as response:
-            if response.status != 200:
-                error_message = await response.text()
-                logger.error(f"Failed to send message to {contact}. Status: {response.status}, Error: {error_message}")
-                return
+            response_text = await response.text()
+            if response.status == 200:
+                return {
+                    "status": "success",
+                    "contact": contact,
+                    "message_id": f"template_{template_name}_{context_info}",
+                    "response": response_text
+                }
+            else:
+                logger.error(f"Failed to send message to {contact}. Status: {response.status}, Error: {response_text}")
+                return {
+                    "status": "failed",
+                    "contact": contact,
+                    "error_code": response.status,
+                    "error_message": response_text
+                }
     except aiohttp.ClientError as e:
         logger.error(f"Error sending message to {contact}: {e}")
-        return
+        return {
+            "status": "failed",
+            "contact": contact,
+            "error_code": "client_error",
+            "error_message": str(e)
+        }
 
 async def send_otp_message(session: aiohttp.ClientSession, token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact: str, variables: ty.Optional[ty.List[str]] = None) -> None:
     url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
@@ -363,13 +379,30 @@ async def send_otp_message(session: aiohttp.ClientSession, token: str, phone_num
 
     try:
         async with session.post(url, json=payload, headers=headers) as response:
-            if response.status != 200:
-                error_message = await response.text()
-                logger.error(f"Failed to send message to {contact}. Status: {response.status}, Error: {error_message}")
+            response_text = await response.text()
+            if response.status == 200:
+                return {
+                    "status": "success",
+                    "contact": contact,
+                    "message_id": f"template_{template_name}",
+                    "response": response_text
+                }
             else:
-                print(f"Message successfully sent to {contact}")
+                logger.error(f"Failed to send message to {contact}. Status: {response.status}, Error: {response_text}")
+                return {
+                    "status": "failed",
+                    "contact": contact,
+                    "error_code": response.status,
+                    "error_message": response_text
+                }
     except aiohttp.ClientError as e:
         logger.error(f"Error sending message to {contact}: {e}")
+        return {
+            "status": "failed",
+            "contact": contact,
+            "error_code": "client_error",
+            "error_message": str(e)
+        }
 
 async def send_bot_message(session: aiohttp.ClientSession, token: str, phone_number_id: str, contact: str, message_type: str, header: ty.Optional[str] = None, body: ty.Optional[str] = None, footer: ty.Optional[str] = None, button_data: ty.Optional[ty.List[ty.Dict[str, str]]] = None, product_data: ty.Optional[ty.Dict] = None, catalog_id: ty.Optional[str] = None, sections: ty.Optional[ty.List[ty.Dict]] = None, latitude: ty.Optional[float] = None, longitude: ty.Optional[float] = None, media_id: ty.Optional[str] = None ) -> None:
     url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
@@ -503,26 +536,26 @@ async def send_bot_message(session: aiohttp.ClientSession, token: str, phone_num
 
 async def send_messages(token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact_list: ty.List[str], variable_list: ty.List[str]) -> None:
     logger.info(f"Processing {len(contact_list)} contacts for sending messages.")
+    results = []
     if media_type == "OTP":
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
             for batch in chunks(contact_list, 75):
                 logger.info(f"Sending batch of {len(batch)} contacts")
                 tasks = [send_otp_message(session, token, phone_number_id, template_name, language, "TEXT", media_id, contact, variable_list) for contact in batch]
-                await asyncio.gather(*tasks)
+                batch_results = await asyncio.gather(*tasks)
+                results.extend(batch_results)
                 await asyncio.sleep(0.5)
     else:
         async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
             for batch in chunks(contact_list, 75):
                 logger.info(f"Sending batch of {len(batch)} contacts")
                 tasks = [send_message(session, token, phone_number_id, template_name, language, media_type, media_id, contact, variable_list) for contact in batch]
-                await asyncio.gather(*tasks)
+                batch_results = await asyncio.gather(*tasks)
+                results.extend(batch_results)
                 await asyncio.sleep(0.5)
         logger.info("All messages processed.")
 
-async def send_otp_messages(token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact_list: ty.List[str], variable_list: ty.List[str]) -> None:
-    logger.info(f"Processing {len(contact_list)} contacts for sending messages.")
-    
-    logger.info("All messages processed.")
+    return results
 
 async def send_template_with_flows(token: str, phone_number_id: str, template_name: str, flow_id: str, language: str, recipient_phone_number: ty.List[str]) -> None:
     logger.info(f"Processing {len(recipient_phone_number)} contacts for sending messages.")
