@@ -234,79 +234,6 @@ async def send_template_with_flow(session: aiohttp.ClientSession, token: str, ph
             logger.error(f"Error sending flow message: {e}")
             raise HTTPException(status_code=500, detail=f"Error sending flow message: {e}")
 
-# async def send_message(session: aiohttp.ClientSession, token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact: str, variables: ty.Optional[ty.List[str]] = None) -> None:
-#     url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
-#     headers = {
-#         "Authorization": f"Bearer {token}",
-#         "Content-Type": "application/json"
-#     }
-
-#     header_component = {
-#         "type": "header",
-#         "parameters": []
-#     }
-
-#     body_component = {
-#         "type": "body",
-#         "parameters": []
-#     }
-    
-#     if variables:
-#         body_component["parameters"] = [
-#             {
-#                 "type": "text",
-#                 "text": variable
-#             } for variable in variables
-#         ]
-
-#     context_info = json.dumps({
-#         "template_name": template_name,
-#         "language": language,
-#         "media_type": media_type
-#     })
-
-#     if media_id and media_type in ["IMAGE", "DOCUMENT", "VIDEO", "AUDIO"]:
-#         header_component["parameters"].append({
-#             "type": media_type.lower(),
-#             media_type.lower(): {"id": media_id}
-#         })
-
-#     payload = {
-#         "messaging_product": "whatsapp",
-#         "to": contact,
-#         "type": "template",
-#         "template": {
-#             "name": template_name,
-#             "language": {"code": language},
-#             "components": [
-#                 header_component,
-#                 body_component
-#             ]
-#         },
-#         "context": {
-#             "message_id": f"template_{template_name}_{context_info}"
-#         }
-#     }
-
-#     try:
-#         timeout = aiohttp.ClientTimeout(total=30)
-#         async with session.post(url, json=payload, headers=headers) as response:
-#             if response.status != 200:
-#                 error_message = await response.text()
-#                 logger.error(f"Failed to send message to {contact}. Status: {response.status}, Error: {error_message}")
-#                 return
-#     except aiohttp.ClientError as e:
-#         logger.error(f"Error sending message to {contact}: {e}")
-#         return
-
-import aiohttp
-import json
-import typing as ty
-import logging
-
-# Set up logging
-logger = logging.getLogger(__name__)
-
 async def send_message(session: aiohttp.ClientSession, token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact: str, variables: ty.Optional[ty.List[str]] = None) -> None:
     url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
     headers = {
@@ -314,7 +241,71 @@ async def send_message(session: aiohttp.ClientSession, token: str, phone_number_
         "Content-Type": "application/json"
     }
 
-    # Prepare components: header, body, and button
+    header_component = {
+        "type": "header",
+        "parameters": []
+    }
+
+    body_component = {
+        "type": "body",
+        "parameters": []
+    }
+    
+    if variables:
+        body_component["parameters"] = [
+            {
+                "type": "text",
+                "text": variable
+            } for variable in variables
+        ]
+
+    context_info = json.dumps({
+        "template_name": template_name,
+        "language": language,
+        "media_type": media_type
+    })
+
+    if media_id and media_type in ["IMAGE", "DOCUMENT", "VIDEO", "AUDIO"]:
+        header_component["parameters"].append({
+            "type": media_type.lower(),
+            media_type.lower(): {"id": media_id}
+        })
+
+    payload = {
+        "messaging_product": "whatsapp",
+        "to": contact,
+        "type": "template",
+        "template": {
+            "name": template_name,
+            "language": {"code": language},
+            "components": [
+                header_component,
+                body_component
+            ]
+        },
+        "context": {
+            "message_id": f"template_{template_name}_{context_info}"
+        }
+    }
+
+    try:
+        timeout = aiohttp.ClientTimeout(total=30)
+        async with session.post(url, json=payload, headers=headers) as response:
+            if response.status != 200:
+                error_message = await response.text()
+                logger.error(f"Failed to send message to {contact}. Status: {response.status}, Error: {error_message}")
+                return
+    except aiohttp.ClientError as e:
+        logger.error(f"Error sending message to {contact}: {e}")
+        return
+
+async def send_otp_message(session: aiohttp.ClientSession, token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact: str, variables: ty.Optional[ty.List[str]] = None) -> None:
+    url = f"https://graph.facebook.com/v20.0/{phone_number_id}/messages"
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Content-Type": "application/json"
+    }
+
     header_component = {
         "type": "header",
         "parameters": []
@@ -332,7 +323,6 @@ async def send_message(session: aiohttp.ClientSession, token: str, phone_number_
         "parameters": []
     }
 
-    # Fill in body parameters with variables if available
     if variables:
         body_component["parameters"] = [
             {
@@ -341,21 +331,18 @@ async def send_message(session: aiohttp.ClientSession, token: str, phone_number_
             } for variable in variables
         ]
 
-    # Handle media type and media_id for header component
     if media_id and media_type in ["IMAGE", "DOCUMENT", "VIDEO", "AUDIO"]:
         header_component["parameters"].append({
             "type": media_type.lower(),
             media_type.lower(): {"id": media_id}
         })
 
-    # Handle button component for URL button
     button_url = "https://www.whatsapp.com/otp/code/?otp_type=COPY_CODE&code_expiration_minutes=10&code=otp123456"
     button_component["parameters"].append({
         "type": "text",
-        "text": "123456"  # Example OTP or variable for the URL
+        "text": "123456"
     })
 
-    # Prepare payload with template, language, and components (header, body, button)
     payload = {
         "messaging_product": "whatsapp",
         "to": contact,
@@ -524,6 +511,16 @@ async def send_messages(token: str, phone_number_id: str, template_name: str, la
             await asyncio.sleep(0.5)
     logger.info("All messages processed.")
 
+async def send_otp_messages(token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact_list: ty.List[str], variable_list: ty.List[str]) -> None:
+    logger.info(f"Processing {len(contact_list)} contacts for sending messages.")
+    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
+        for batch in chunks(contact_list, 75):
+            logger.info(f"Sending batch of {len(batch)} contacts")
+            tasks = [send_otp_message(session, token, phone_number_id, template_name, language, "TEXT", media_id, contact, variable_list) for contact in batch]
+            await asyncio.gather(*tasks)
+            await asyncio.sleep(0.5)
+    logger.info("All messages processed.")
+
 async def send_template_with_flows(token: str, phone_number_id: str, template_name: str, flow_id: str, language: str, recipient_phone_number: ty.List[str]) -> None:
     logger.info(f"Processing {len(recipient_phone_number)} contacts for sending messages.")
     async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
@@ -644,16 +641,28 @@ async def send_sms_api(request: APIMessageRequest):
     
     # Step 3: Send messages 
     try:
-        await send_messages(
-            token=user_data.register_app__token,
-            phone_number_id=user_data.phone_number_id,
-            template_name=request.template_name,
-            language=request.language,
-            media_type=request.media_type,
-            media_id=request.media_id,
-            contact_list=request.contact_list,
-            variable_list=request.variable_list
-        )
+        if request.media_type == "OTP":
+            await send_otp_messages(
+                token=user_data.register_app__token,
+                phone_number_id=user_data.phone_number_id,
+                template_name=request.template_name,
+                language=request.language,
+                media_type=request.media_type,
+                media_id=request.media_id,
+                contact_list=request.contact_list,
+                variable_list=request.variable_list
+            )
+        else:
+            await send_messages(
+                token=user_data.register_app__token,
+                phone_number_id=user_data.phone_number_id,
+                template_name=request.template_name,
+                language=request.language,
+                media_type=request.media_type,
+                media_id=request.media_id,
+                contact_list=request.contact_list,
+                variable_list=request.variable_list
+            )
         
         # Step 4: Update balance and create report
         report_id = await update_balance_and_report(
