@@ -503,22 +503,25 @@ async def send_bot_message(session: aiohttp.ClientSession, token: str, phone_num
 
 async def send_messages(token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact_list: ty.List[str], variable_list: ty.List[str]) -> None:
     logger.info(f"Processing {len(contact_list)} contacts for sending messages.")
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
-        for batch in chunks(contact_list, 75):
-            logger.info(f"Sending batch of {len(batch)} contacts")
-            tasks = [send_message(session, token, phone_number_id, template_name, language, media_type, media_id, contact, variable_list) for contact in batch]
-            await asyncio.gather(*tasks)
-            await asyncio.sleep(0.5)
-    logger.info("All messages processed.")
+    if media_type == "OTP":
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
+            for batch in chunks(contact_list, 75):
+                logger.info(f"Sending batch of {len(batch)} contacts")
+                tasks = [send_otp_message(session, token, phone_number_id, template_name, language, "TEXT", media_id, contact, variable_list) for contact in batch]
+                await asyncio.gather(*tasks)
+                await asyncio.sleep(0.5)
+    else:
+        async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
+            for batch in chunks(contact_list, 75):
+                logger.info(f"Sending batch of {len(batch)} contacts")
+                tasks = [send_message(session, token, phone_number_id, template_name, language, media_type, media_id, contact, variable_list) for contact in batch]
+                await asyncio.gather(*tasks)
+                await asyncio.sleep(0.5)
+        logger.info("All messages processed.")
 
 async def send_otp_messages(token: str, phone_number_id: str, template_name: str, language: str, media_type: str, media_id: ty.Optional[str], contact_list: ty.List[str], variable_list: ty.List[str]) -> None:
     logger.info(f"Processing {len(contact_list)} contacts for sending messages.")
-    async with aiohttp.ClientSession(connector=aiohttp.TCPConnector(limit=1000)) as session:
-        for batch in chunks(contact_list, 75):
-            logger.info(f"Sending batch of {len(batch)} contacts")
-            tasks = [send_otp_message(session, token, phone_number_id, template_name, language, "TEXT", media_id, contact, variable_list) for contact in batch]
-            await asyncio.gather(*tasks)
-            await asyncio.sleep(0.5)
+    
     logger.info("All messages processed.")
 
 async def send_template_with_flows(token: str, phone_number_id: str, template_name: str, flow_id: str, language: str, recipient_phone_number: ty.List[str]) -> None:
@@ -641,28 +644,16 @@ async def send_sms_api(request: APIMessageRequest):
     
     # Step 3: Send messages 
     try:
-        if request.media_type == "OTP":
-            await send_otp_messages(
-                token=user_data.register_app__token,
-                phone_number_id=user_data.phone_number_id,
-                template_name=request.template_name,
-                language=request.language,
-                media_type=request.media_type,
-                media_id=request.media_id,
-                contact_list=request.contact_list,
-                variable_list=request.variable_list
-            )
-        else:
-            await send_messages(
-                token=user_data.register_app__token,
-                phone_number_id=user_data.phone_number_id,
-                template_name=request.template_name,
-                language=request.language,
-                media_type=request.media_type,
-                media_id=request.media_id,
-                contact_list=request.contact_list,
-                variable_list=request.variable_list
-            )
+        await send_messages(
+            token=user_data.register_app__token,
+            phone_number_id=user_data.phone_number_id,
+            template_name=request.template_name,
+            language=request.language,
+            media_type=request.media_type,
+            media_id=request.media_id,
+            contact_list=request.contact_list,
+            variable_list=request.variable_list
+        )
         
         # Step 4: Update balance and create report
         report_id = await update_balance_and_report(
