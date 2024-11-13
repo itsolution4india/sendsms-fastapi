@@ -677,7 +677,7 @@ async def send_sms_api(request: APIMessageRequest):
     
     # Step 3: Send messages 
     try:
-        await send_messages(
+        results = await send_messages(
             token=user_data.register_app__token,
             phone_number_id=user_data.phone_number_id,
             template_name=request.template_name,
@@ -687,29 +687,40 @@ async def send_sms_api(request: APIMessageRequest):
             contact_list=request.contact_list,
             variable_list=request.variable_list
         )
+
+        successful_sends = len([r for r in results if r['status'] == 'success'])
+        failed_sends = len([r for r in results if r['status'] == 'failed'])
         
         # Step 4: Update balance and create report
-        report_id = await update_balance_and_report(
-            user_id=request.user_id,
-            api_token=request.api_token,
-            coins=total_contacts,
-            contact_list=request.contact_list,
-            template_name=request.template_name
-        )
+        if successful_sends > 0:
+            report_id = await update_balance_and_report(
+                user_id=request.user_id,
+                api_token=request.api_token,
+                coins=successful_sends,  # Only deduct coins for successful sends
+                contact_list=request.contact_list,
+                template_name=request.template_name
+            )
+        else:
+            report_id = None
         
         return {
-            "status": "success",
-            "message": "Messages sent successfully",
-            "contacts_processed": total_contacts,
-            "remaining_coins": user_data.coins - total_contacts,
-            "report_id": report_id
+            "status": "completed",
+            "summary": {
+                "total_contacts": total_contacts,
+                "successful_sends": successful_sends,
+                "failed_sends": failed_sends,
+                "remaining_coins": user_data.coins - successful_sends
+            },
+            "report_id": report_id,
+            "detailed_results": results
         }
         
     except Exception as e:
         logger.error(f"Message sending failed: {str(e)}")
         return {
             "status": "failed",
-            "detail": "Failed to send messages error code 530",
+            "error_code": "530",
+            "detail": "Failed to send messages",
             "error": str(e)
         }
 
